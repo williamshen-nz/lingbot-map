@@ -117,6 +117,56 @@ The paper reports ~20 FPS at 518×378 under the same configuration but **never s
 
 `--fa3` selects FlashInfer's FA3 kernel, which is **Hopper (SM90) only**. It fails to compile on Ampere and Blackwell consumer cards.
 
+## Server
+
+Reconstruction over HTTP: POST a zip of images, get back an npz of camera poses, dense depth and intrinsics. Meant for running on the GPU box and calling from wherever you actually work.
+
+The dependencies come from the `server` extra, already installed by the `uv sync --all-extras` above.
+
+```bash
+uv run uvicorn server:app --host 0.0.0.0 --port 5464
+```
+
+The model loads once at startup and stays resident. Wait for it to report ready:
+
+```bash
+curl http://localhost:5464/health
+# {"ok":true,"weights":"/path/to/weights/lingbot-map.pt"}
+```
+
+Then send a scan. The request body is a plain zip of images — there are no other parameters:
+
+```bash
+cd /path/to/images && zip -r ~/scan.zip . -i '*.jpg'
+curl --data-binary @scan.zip http://HOST:5464/reconstruct -o scan.npz
+```
+
+Frames are ordered by **filename**, so name them such that lexicographic order matches capture order (zero-pad indices, or use timestamps — note `9.jpg` sorts after `10.jpg`). All images must share one aspect ratio. Reading the result:
+
+```python
+import json, numpy as np
+
+d = np.load("scan.npz", allow_pickle=True)
+metadata = json.loads(str(d["metadata"].item()))
+
+d["c2w"]        # (N,4,4) world-from-camera, OpenCV axes
+d["depth"]      # (N,H,W) camera-z
+d["K"]          # (N,3,3) intrinsics in model pixel space
+d["K_upright"]  # (N,3,3) the same camera at full resolution
+```
+
+Poses and depth share **one unknown scale factor** and the world is not gravity-aligned — fit against a metrically scaled trajectory from your capture device if you need metres. The complete output schema, the conventions, and worked unprojection snippets are in the `server.py` module docstring.
+
+Measured end-to-end on an RTX 3090, including npz packing and localhost transfer:
+
+| Frames | Resolution | Time | Response |
+|---|---|---|---|
+| 147 | 518×392 | 32.5 s | 114 MiB |
+| 324 | 518×294 | 56.0 s | 188 MiB |
+| 500 | 518×294 | 90.8 s | 291 MiB |
+
+Requests are served strictly one at a time, since the model carries KV-cache state through the streaming loop. There is no authentication — keep it on a trusted network.
+
 ## Offline Rendering Pipeline
 
 The batch renderer (`demo_render/batch_demo.py`) produces point-cloud flythrough MP4s for sequences too long for the interactive viewer. It needs two CUDA extensions built in place first:
