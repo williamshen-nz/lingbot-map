@@ -194,8 +194,8 @@ class Session:
         if self.first_shape is None:
             self.first_shape = shape
             # The KV cache is sized from the first frame and cannot be resized
-            # (aggregator/stream.py:207), so drop any manager left by a previous
-            # session before it sees this shape.
+            # (aggregator/stream.py:207), so any manager left by a previous
+            # session must be dropped before this one starts.
             self.model.aggregator.kv_cache_manager = None
             if self.device.type == "cuda":
                 torch.cuda.empty_cache()

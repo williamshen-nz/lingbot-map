@@ -36,8 +36,7 @@ no tuning parameters, query strings or headers to set.
   * JPEG and PNG only. Other entries, dotfiles, and the ``__MACOSX/._*``
     resource forks macOS adds to zips are skipped.
   * At least 2 images; the frame count is otherwise unbounded.
-  * Every image must share one aspect ratio, else 400. (Mixed sizes would be
-    silently white-padded to a common shape, which is worse than failing.)
+  * Every image must share one aspect ratio, else 400.
   * Frames are ordered by **filename**, ascending — the same rule demo.py uses.
     Name them so lexicographic order matches capture order: zero-pad indices,
     or use timestamps. Beware that "9.jpg" sorts after "10.jpg".
@@ -289,11 +288,9 @@ def reconstruct(paths):
     images = load_and_preprocess_images(paths, image_size=IMAGE_SIZE, patch_size=PATCH_SIZE)
     n, _, h, w = images.shape
 
-    # FlashInfer's KV cache manager is built lazily on first use and sized from
-    # that frame shape (aggregator/stream.py:207). clean_kv_cache() resets its
-    # contents but not its geometry, so a differently-shaped scan would assert
-    # deep in append_frame. Drop it whenever the shape changes and let the next
-    # forward rebuild it.
+    # The FlashInfer KV cache manager is sized from the first frame shape it sees
+    # and clean_kv_cache() does not resize it (aggregator/stream.py:207), so it
+    # must be dropped and rebuilt whenever the shape changes.
     if state.get("shape") != (h, w):
         model.aggregator.kv_cache_manager = None
         state["shape"] = (h, w)
@@ -310,9 +307,8 @@ def reconstruct(paths):
         )
 
     pose_enc = preds["pose_enc"].float()
-    # pose_encoding_to_extri_intri returns world_from_camera (c2w) despite its
-    # docstring; demo.py inverts it and the viewer inverts it back. Verified by
-    # trajectory alignment against ARKit poses. Flip here if that ever changes.
+    # pose_encoding_to_extri_intri returns world_from_camera (c2w), despite its
+    # docstring claiming otherwise.
     c2w_34, K = pose_encoding_to_extri_intri(pose_enc, (h, w))
     c2w = torch.zeros((*c2w_34.shape[:-2], 4, 4), dtype=c2w_34.dtype)
     c2w[..., :3, :4] = c2w_34.cpu()
