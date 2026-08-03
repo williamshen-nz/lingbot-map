@@ -124,7 +124,13 @@ Reconstruction over HTTP: POST a zip of images, get back an npz of camera poses,
 The dependencies come from the `server` extra, already installed by the `uv sync --all-extras` above.
 
 ```bash
-uv run uvicorn server:app --host 0.0.0.0 --port 5464
+uv run python server.py
+```
+
+This listens on `0.0.0.0:5464`. Override with `LINGBOT_HOST`, `LINGBOT_PORT`, or `LINGBOT_WEIGHTS`:
+
+```bash
+LINGBOT_PORT=9000 uv run python server.py
 ```
 
 The model loads once at startup and stays resident. Wait for it to report ready:
@@ -149,11 +155,14 @@ import json, numpy as np
 d = np.load("scan.npz", allow_pickle=True)
 metadata = json.loads(str(d["metadata"].item()))
 
+d["names"]      # (N,) source filename for each slot — frame i came from names[i]
 d["c2w"]        # (N,4,4) world-from-camera, OpenCV axes
 d["depth"]      # (N,H,W) camera-z
 d["K"]          # (N,3,3) intrinsics in model pixel space
 d["K_upright"]  # (N,3,3) the same camera at full resolution
 ```
+
+You never have to re-derive the ordering: `names[i]` is the file that produced frame `i`, so `{n: i for i, n in enumerate(d["names"])}` maps back from filename to index.
 
 Poses and depth share **one unknown scale factor** and the world is not gravity-aligned — fit against a metrically scaled trajectory from your capture device if you need metres. The complete output schema, the conventions, and worked unprojection snippets are in the `server.py` module docstring.
 

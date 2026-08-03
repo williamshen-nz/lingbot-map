@@ -7,19 +7,26 @@ agnostic — it takes images and nothing else.
 Running
 -------
     uv sync --all-extras
-    uv run uvicorn server:app --host 0.0.0.0 --port 5464
+    uv run python server.py                  # 0.0.0.0:5464
 
     GET  /health       -> {"ok": bool, "weights": str}
     POST /reconstruct  -> npz, see Output below
 
     curl --data-binary @scan.zip http://HOST:5464/reconstruct -o scan.npz
 
-Pass --port explicitly: uvicorn defaults to 8000 otherwise, which collides with
-half the dev servers in existence. 5464 is unassigned in /etc/services and sits
-below the 32768-60999 ephemeral range, so it will not clash with an outbound
-connection that happened to grab the same number. Use --host 0.0.0.0 to accept
-connections from other machines; there is no authentication, so keep it on a
-trusted network.
+Host, port and checkpoint come from the environment::
+
+    LINGBOT_HOST=127.0.0.1 LINGBOT_PORT=9000 uv run python server.py
+    LINGBOT_WEIGHTS=/path/to/other.pt uv run python server.py
+
+Port 5464 is unassigned in /etc/services and sits below the 32768-60999
+ephemeral range, so it will not clash with an outbound connection that happened
+to grab the same number. It binds all interfaces by default so other machines
+can reach it; there is no authentication, so keep it on a trusted network.
+
+Launching through the uvicorn CLI instead (``uvicorn server:app``) bypasses this
+module's defaults entirely and will listen on uvicorn's own 8000 unless you pass
+``--host``/``--port`` yourself.
 
 Input
 -----
@@ -75,6 +82,18 @@ Conventions and caveats
 
 Consuming
 ---------
+Every array is indexed consistently, and ``names`` records which source file
+produced each slot — so nothing depends on you reconstructing the sort order::
+
+    d["names"][i]        # e.g. "315615218309.jpg", the file behind frame i
+    d["c2w"][i]          # its pose, d["depth"][i] its depth, and so on
+
+Names are basenames with any archive subdirectory stripped. They are guaranteed
+unique, since a basename collision is rejected at upload rather than silently
+dropping a frame. To go the other way, from file to index::
+
+    idx = {n: i for i, n in enumerate(d["names"])}
+
 Unproject one frame into world points::
 
     d = np.load("scan.npz", allow_pickle=True)
@@ -130,6 +149,8 @@ WEIGHTS = os.environ.get(
     "LINGBOT_WEIGHTS",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "weights/lingbot-map.pt"),
 )
+HOST = os.environ.get("LINGBOT_HOST", "0.0.0.0")
+PORT = int(os.environ.get("LINGBOT_PORT", "5464"))
 
 # Mirrors demo.py's argparse defaults; load_model() reads these off the namespace.
 MODEL_ARGS = argparse.Namespace(
@@ -358,3 +379,9 @@ async def reconstruct_endpoint(request: Request):
             media_type="application/octet-stream",
             headers={"Content-Disposition": 'attachment; filename="reconstruction.npz"'},
         )
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host=HOST, port=PORT)
