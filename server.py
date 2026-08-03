@@ -7,12 +7,19 @@ agnostic — it takes images and nothing else.
 Running
 -------
     uv sync --all-extras
-    uv run uvicorn server:app --host 0.0.0.0 --port 8000
+    uv run uvicorn server:app --host 0.0.0.0 --port 5464
 
     GET  /health       -> {"ok": bool, "weights": str}
     POST /reconstruct  -> npz, see Output below
 
-    curl --data-binary @scan.zip http://HOST:8000/reconstruct -o scan.npz
+    curl --data-binary @scan.zip http://HOST:5464/reconstruct -o scan.npz
+
+Pass --port explicitly: uvicorn defaults to 8000 otherwise, which collides with
+half the dev servers in existence. 5464 is unassigned in /etc/services and sits
+below the 32768-60999 ephemeral range, so it will not clash with an outbound
+connection that happened to grab the same number. Use --host 0.0.0.0 to accept
+connections from other machines; there is no authentication, so keep it on a
+trusted network.
 
 Input
 -----
