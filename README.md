@@ -106,6 +106,13 @@ uv run python gct_profile.py --backend flashinfer --dtype bf16 --compile
 
 On an **RTX 3090** at 378×504, 500 frames, `sliding_window=64`, `keyframe_interval=1`, FlashInfer + bf16 + compile: **4.48 FPS** (223 ms/frame), flat across the sequence.
 
+End-to-end `demo.py` streaming runs on the Feijoa scene (147 frames, 518×392, `keyframe_interval=1`):
+
+| GPU | `--compile` | no compile | compile gain |
+|---|---|---|---|
+| RTX 3090 | 27.5 s (5.3 FPS) | 30.6 s (4.8 FPS) | 1.11× |
+| RTX 4090 | 16.6 s (8.9 FPS) | 19.0 s (7.7 FPS) | 1.14× |
+
 The paper reports ~20 FPS at 518×378 under the same configuration but **never states which GPU** it was measured on, so treat that figure as hardware-dependent. Throughput here is a constant per-frame cost, not sequence-length degradation — window and keyframe settings will not change it.
 
 `--fa3` selects FlashInfer's FA3 kernel, which is **Hopper (SM90) only**. It fails to compile on Ampere and Blackwell consumer cards.
