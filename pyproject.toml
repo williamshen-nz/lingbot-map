@@ -2,7 +2,7 @@
 name = "lingbot-map"
 version = "0.1.0"
 description = "LingBot-Map: Geometric Context Transformer for Streaming 3D Reconstruction"
-requires-python = ">= 3.10"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "Pillow",
     "huggingface_hub",
@@ -10,12 +10,17 @@ dependencies = [
     "safetensors",
     "opencv-python",
     "tqdm",
-    "scipy"
+    "scipy",
+    "numpy==1.26.4",
+    "torch==2.8.0",
+    "torchvision==0.23.0",
 ]
 
 [project.optional-dependencies]
 vis = ["viser>=0.2.23", "trimesh", "matplotlib", "onnxruntime", "requests"]
 demo = ["lingbot-map[vis]"]
+render = ["open3d>=0.19", "pyyaml", "kaolin==0.18.0"]
+flashinfer = ["flashinfer-python"]
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
@@ -24,3 +29,19 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["lingbot_map*"]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "kaolin-torch280-cu128"
+url = "https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.8.0_cu128.html"
+format = "flat"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+kaolin = { index = "kaolin-torch280-cu128" }
