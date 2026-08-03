@@ -21,7 +21,7 @@ vis = ["viser>=0.2.23", "trimesh", "matplotlib", "onnxruntime", "requests"]
 demo = ["lingbot-map[vis]"]
 render = ["open3d>=0.19", "pyyaml", "kaolin==0.18.0"]
 flashinfer = ["flashinfer-python"]
-server = ["fastapi", "uvicorn"]
+server = ["fastapi", "uvicorn", "websockets"]
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]

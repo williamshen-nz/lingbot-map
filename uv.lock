@@ -852,6 +852,7 @@ render = [
 server = [
     { name = "fastapi" },
     { name = "uvicorn" },
+    { name = "websockets" },
 ]
 vis = [
     { name = "matplotlib" },
@@ -885,6 +886,7 @@ requires-dist = [
     { name = "trimesh", marker = "extra == 'vis'" },
     { name = "uvicorn", marker = "extra == 'server'" },
     { name = "viser", marker = "extra == 'vis'", specifier = ">=0.2.23" },
+    { name = "websockets", marker = "extra == 'server'" },
 ]
 provides-extras = ["vis", "demo", "render", "flashinfer", "server"]
 

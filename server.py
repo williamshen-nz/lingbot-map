@@ -227,27 +227,40 @@ def extract_images(blob, dest):
     return sorted(paths)
 
 
-def frame_geometry(paths):
-    """Recompute load_fn.py's resize/crop per frame so model pixels map home.
+def geometry_for(img):
+    """Resize/crop bookkeeping for one PIL image, as load_fn.py would apply it.
 
     load_and_preprocess_images does not report the transform it applied, so the
-    arithmetic from load_fn.py:170-180 is repeated here. The caller asserts the
+    arithmetic from load_fn.py:170-180 is repeated here. Callers assert the
     result against the tensor the loader actually produced.
     """
+    orig = img.size
+    orientation = img.getexif().get(274, 1)
+
+    w, h = ImageOps.exif_transpose(img).size
+    new_w = IMAGE_SIZE
+    new_h = round(h * (new_w / w) / PATCH_SIZE) * PATCH_SIZE
+    crop = (0, (new_h - IMAGE_SIZE) // 2 if new_h > IMAGE_SIZE else 0)
+
+    return {
+        "orig_wh": orig,
+        "upright_wh": (w, h),
+        "resize_wh": (new_w, new_h),
+        "crop_xy": crop,
+        "exif_orientation": orientation,
+    }
+
+
+def frame_geometry(paths):
+    """Stack geometry_for() across a list of image paths."""
     orig_wh, upright_wh, resize_wh, crop_xy, orientation = [], [], [], [], []
     for path in paths:
-        img = Image.open(path)
-        orig_wh.append(img.size)
-        orientation.append(img.getexif().get(274, 1))
-
-        img = ImageOps.exif_transpose(img)
-        w, h = img.size
-        upright_wh.append((w, h))
-
-        new_w = IMAGE_SIZE
-        new_h = round(h * (new_w / w) / PATCH_SIZE) * PATCH_SIZE
-        resize_wh.append((new_w, new_h))
-        crop_xy.append((0, (new_h - IMAGE_SIZE) // 2 if new_h > IMAGE_SIZE else 0))
+        g = geometry_for(Image.open(path))
+        orig_wh.append(g["orig_wh"])
+        upright_wh.append(g["upright_wh"])
+        resize_wh.append(g["resize_wh"])
+        crop_xy.append(g["crop_xy"])
+        orientation.append(g["exif_orientation"])
 
     return {
         "orig_wh": np.array(orig_wh, np.int32),

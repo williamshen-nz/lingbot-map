@@ -176,6 +176,24 @@ Measured end-to-end on an RTX 3090, including npz packing and localhost transfer
 
 Requests are served strictly one at a time, since the model carries KV-cache state through the streaming loop. There is no authentication — keep it on a trusted network.
 
+### Live sessions
+
+`server.py` needs the whole scan up front. For live capture — a phone streaming frames as you walk — `stream_server.py` exposes the model's causal loop over a WebSocket instead, returning a pose and depth map per frame while you are still scanning.
+
+```bash
+uv run python stream_server.py     # 0.0.0.0:5465, override with LINGBOT_STREAM_PORT
+```
+
+One session per connection, one session at a time; a second connection is closed with code 1013. Open with `{"type":"start","budget":300}`, then send each frame as a JSON header (`{"type":"frame","frame_id":8412}`) followed by its JPEG bytes, and finish with `{"type":"end"}`. Results come back as a JSON header plus a binary payload of `depth` then `conf`, both float16.
+
+The first 8 frames are buffered rather than reconstructed — the model fixes scale over them bidirectionally before the causal loop can start — and each is acknowledged with `{"type":"buffered"}` so the client can keep one uniform send-and-wait loop. When the eighth arrives, all 8 results are emitted at once, and every later frame yields exactly one.
+
+`frame_id` is echoed rather than inferred, because a live client is expected to drop frames upstream: what reaches the server is a sparse subsequence of what the camera captured, so position in the stream says nothing about which capture a result belongs to.
+
+Output conventions are identical to the batch endpoint, and results are bit-identical to running the same frames through `/reconstruct`. Measured 3.97 fps on a 3090 at 518×392 — roughly 19% slower per frame than batch, since each frame's depth is transferred immediately instead of in one block. Note it loads its own copy of the model, so running both servers at once costs twice the GPU memory.
+
+Full protocol, message shapes and constraints are in the `stream_server.py` module docstring.
+
 ## Offline Rendering Pipeline
 
 The batch renderer (`demo_render/batch_demo.py`) produces point-cloud flythrough MP4s for sequences too long for the interactive viewer. It needs two CUDA extensions built in place first:
