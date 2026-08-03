@@ -14,7 +14,7 @@ from typing import Optional, Tuple
 import numpy as np
 import torch
 import cv2
-import matplotlib.cm as cm
+import matplotlib
 
 
 @dataclasses.dataclass
@@ -67,7 +67,7 @@ def get_vertical_colorbar(
     canvas = FigureCanvasAgg(fig)
 
     ax = fig.add_subplot(111)
-    cmap = cm.get_cmap(cmap_name)
+    cmap = matplotlib.colormaps.get_cmap(cmap_name)
     norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
 
     tick_cnt = 6
@@ -135,7 +135,7 @@ def colorize_np(
     x = np.clip(x, vmin, vmax)
     x = (x - vmin) / (vmax - vmin)
 
-    cmap = cm.get_cmap(cmap_name)
+    cmap = matplotlib.colormaps.get_cmap(cmap_name)
     x_new = cmap(x)[:, :, :3]
 
     if mask is not None:
