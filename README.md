@@ -56,6 +56,60 @@ Three example scenes ship with the repo and need no extra download: `example/cou
 
 > **Note:** `--mask_sky` downloads `skyseg.onnx` to the HuggingFace cache (`~/.cache/huggingface`) on first use. If your home partition is short on space, export `HF_HOME` to somewhere roomier first.
 
+## Inference Modes
+
+`demo.py` runs in one of two modes, set with `--mode`:
+
+| Mode | When to use | Command |
+|---|---|---|
+| `streaming` (default) | Frame-by-frame with a paged KV cache. The normal path. | `--mode streaming` |
+| `windowed` | Sequences beyond ~3000 frames. Overlapping windows, KV cache reset per window. | `--mode windowed --window_size 128 --overlap_keyframes 8` |
+
+Input is either a folder of images or a video:
+
+```bash
+--image_folder path/to/images/         # sorted image files
+--video_path path/to/video.mp4 --fps 10  # decoded at the given FPS
+```
+
+`--stride N` subsamples input frames, `--first_k N` truncates to the first N.
+
+### Keyframe interval
+
+`--keyframe_interval` controls which frames stay resident in the KV cache. Non-keyframes still produce full predictions — they just don't grow the cache. The model was trained with video RoPE over 320 views, so quality degrades once the cache exceeds that.
+
+- **Streaming**: auto-selected if unset — `1` when the sequence is ≤ 320 frames, otherwise `ceil(num_frames / 320)`.
+- **Windowed**: defaults to `1`. `--window_size` counts *keyframes*, not actual frames, so a value above 1 expands each window's real coverage to `num_scale_frames + (window_size - num_scale_frames) * keyframe_interval`.
+
+Use `--overlap_keyframes` rather than `--overlap_size` whenever `keyframe_interval > 1`; it is converted internally to `max(num_scale_frames, overlap_keyframes * keyframe_interval)` actual frames.
+
+### Speed and memory knobs
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--compile` | **off** | `torch.compile` on hot modules with a CUDA-graph warmup. Off by default — pass it explicitly for the accelerated path. |
+| `--use_sdpa` | off | Falls back to PyTorch SDPA attention. FlashInfer paged KV is the default and is roughly 2× faster. |
+| `--camera_num_iterations` | `4` | Camera-head refinement passes per frame. `1` is faster and shrinks the camera KV cache 4×, at some pose accuracy. |
+| `--num_scale_frames` | `8` | Bidirectional scale frames at startup. `2` reduces the initial activation peak. |
+| `--offload_to_cpu` | **off** | Moves per-frame predictions to CPU to cut GPU peak memory, at a throughput cost. Enable with `--offload_to_cpu`, disable with `--no-offload_to_cpu`. (Upstream's help text claims this is on by default — it is not.) |
+| `--kv_cache_sliding_window` | `64` | Pose-reference window size. |
+
+Precision is chosen automatically: bf16 on compute capability ≥ 8.0, otherwise fp16.
+
+### Measured throughput
+
+Benchmark the model on your own hardware with the bundled profiler (it builds random weights, so no checkpoint is needed):
+
+```bash
+uv run python gct_profile.py --backend flashinfer --dtype bf16 --compile
+```
+
+On an **RTX 3090** at 378×504, 500 frames, `sliding_window=64`, `keyframe_interval=1`, FlashInfer + bf16 + compile: **4.48 FPS** (223 ms/frame), flat across the sequence.
+
+The paper reports ~20 FPS at 518×378 under the same configuration but **never states which GPU** it was measured on, so treat that figure as hardware-dependent. Throughput here is a constant per-frame cost, not sequence-length degradation — window and keyframe settings will not change it.
+
+`--fa3` selects FlashInfer's FA3 kernel, which is **Hopper (SM90) only**. It fails to compile on Ampere and Blackwell consumer cards.
+
 ## Offline Rendering Pipeline
 
 The batch renderer (`demo_render/batch_demo.py`) produces point-cloud flythrough MP4s for sequences too long for the interactive viewer. It needs two CUDA extensions built in place first:
